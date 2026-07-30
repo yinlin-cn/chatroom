@@ -1,0 +1,155 @@
+// 必须包含
+#include <iostream>
+#include <string>
+#include <mysql.h>    // MySQL C API（官方原生，最稳定）
+
+// VS 自动链接 libmysql.lib（不用去项目属性配置链接器）
+#pragma comment(lib, "libmysql.lib")
+
+using namespace std;
+
+// ==============================================
+// 【数据库配置】 你只需要改这里！
+// ==============================================
+const char* HOST = "localhost";
+const char* USER = "root";
+const char* PWD = "123456";    // 你的MySQL密码
+const char* DB_NAME = "test";  // 你的数据库名
+int PORT = 3306;
+
+int main()
+{
+    // ==============================================
+    // 1. 初始化MySQL连接对象
+    // ==============================================
+    MYSQL mysql;
+    MYSQL* conn = mysql_init(&mysql);
+
+    if (!conn)
+    {
+        cout << "初始化失败！" << endl;
+        return 1;
+    }
+
+    // ==============================================
+    // 2. 设置UTF8编码（解决中文乱码 必须加！）
+    // ==============================================
+    mysql_options(conn, MYSQL_SET_CHARSET_NAME, "utf8");
+
+    // ==============================================
+    // 3. 连接数据库
+    // ==============================================
+    if (!mysql_real_connect(
+        conn,
+        HOST,
+        USER,
+        PWD,
+        DB_NAME,
+        PORT,
+        NULL, 0
+    ))
+    {
+        cout << "连接失败：" << mysql_error(conn) << endl;
+        return 1;
+    }
+
+    cout << "✅ 数据库连接成功！" << endl;
+
+    // ==============================================
+    // 【操作1】执行 INSERT / UPDATE / DELETE（无结果集）
+    // ==============================================
+    {
+        // C++ string 拼接SQL（最常用）
+        string name = "张三";
+        int age = 21;
+
+        // 拼接SQL语句
+        string sql = "INSERT INTO student(name, age) VALUES('"
+            + name + "', "
+            + to_string(age) + ")";
+
+        // C API必须用 .c_str() 转成C字符串
+        if (mysql_query(conn, sql.c_str()) == 0)
+        {
+            cout << "✅ 插入成功，影响行数：" << mysql_affected_rows(conn) << endl;
+        }
+        else
+        {
+            cout << "❌ 插入失败：" << mysql_error(conn) << endl;
+        }
+    }
+
+    // ==============================================
+    // 【操作2】执行 SELECT 查询（有结果集）
+    // ==============================================
+    {
+        string sql = "SELECT id, name, age FROM student";
+
+        if (mysql_query(conn, sql.c_str()) != 0)
+        {
+            cout << "查询失败：" << mysql_error(conn) << endl;
+            goto END; // 出错直接跳去关闭连接
+        }
+
+        // 获取结果集
+        MYSQL_RES* res = mysql_store_result(conn);
+        if (!res)
+        {
+            cout << "无数据" << endl;
+            goto END;
+        }
+
+        // 获取列数
+        int cols = mysql_num_fields(res);
+        cout << "\n========== 查询结果 ==========" << endl;
+
+        // 读取每一行
+        MYSQL_ROW row;
+        while ((row = mysql_fetch_row(res)))
+        {
+            // 按字段顺序读取
+            cout << "ID：" << row[0]
+                 << "  姓名：" << row[1]
+                 << "  年龄：" << row[2] << endl;
+        }
+
+        // 释放结果集（必须！）
+        mysql_free_result(res);
+    }
+
+    // ==============================================
+    // 【操作3】带条件的查询（C++ string拼接）
+    // ==============================================
+    {
+        string name = "张三";
+        string sql = "SELECT * FROM student WHERE name = '" + name + "'";
+
+        mysql_query(conn, sql.c_str());
+        // ... 结果集处理同上
+    }
+
+    // ==============================================
+    // 【操作4】修改数据 UPDATE
+    // ==============================================
+    {
+        string sql = "UPDATE student SET age=22 WHERE name='张三'";
+        mysql_query(conn, sql.c_str());
+    }
+
+    // ==============================================
+    // 【操作5】删除数据 DELETE
+    // ==============================================
+    {
+        string sql = "DELETE FROM student WHERE id=1";
+        mysql_query(conn, sql.c_str());
+    }
+
+    // ==============================================
+    // 结束：关闭连接
+    // ==============================================
+END:
+    mysql_close(conn);
+    cout << "\n连接已关闭" << endl;
+
+    return 0;
+}
